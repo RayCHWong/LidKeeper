@@ -166,3 +166,7 @@ LidKeeper/
     ├── StartAtLogin.swift              # login item (SMAppService)
     └── StatusMenuController.swift      # menu-bar item + menu
 ```
+
+## License
+
+LidKeeper is released under the [MIT License](LICENSE).
