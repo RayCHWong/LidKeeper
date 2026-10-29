@@ -101,9 +101,12 @@ final class AutoKeepAwake {
     private let defaults = UserDefaults.standard
     private var timer: Timer?
     private var activity: NSObjectProtocol?
+    private var powerObserver: AnyObject?
 
     init(power: PowerAssertionManager) {
         self.power = power
+        // React to plugging in or out at once, not at the next 15 s check.
+        powerObserver = PowerSource.observe { [weak self] in self?.evaluate() }
         if isOn { start() }
     }
 

@@ -35,4 +35,25 @@ struct PowerSource {
             batteryPercent: percent
         )
     }
+
+    /// Calls `handler` on the main run loop whenever the power source or
+    /// battery changes — plugging in or out included — for as long as the
+    /// returned token is kept.
+    static func observe(_ handler: @escaping () -> Void) -> AnyObject? {
+        final class Observer {
+            let handler: () -> Void
+            var source: CFRunLoopSource?
+            init(_ handler: @escaping () -> Void) { self.handler = handler }
+            deinit { if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .defaultMode) } }
+        }
+        let observer = Observer(handler)
+        let context = Unmanaged.passUnretained(observer).toOpaque()
+        guard let source = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            Unmanaged<Observer>.fromOpaque(context).takeUnretainedValue().handler()
+        }, context)?.takeRetainedValue() else { return nil }
+        observer.source = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        return observer
+    }
 }

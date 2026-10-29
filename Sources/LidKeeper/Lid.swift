@@ -32,10 +32,16 @@ enum Lid {
     /// that sleep into dark wake (`pmset -g log` shows "Entering DarkWake
     /// state due to 'Clamshell Sleep'"). On battery macOS ignores the
     /// assertion, as Apple documents, and the Mac really sleeps.
+    ///
+    /// On battery the flag can't be trusted: with our assertion held it can
+    /// read "No" while closing the lid still sleeps the Mac ("Entering Sleep
+    /// state due to 'Clamshell Sleep' … Using Batt"). Only turning sleep off
+    /// system-wide keeps a closed Mac running there, so that's all we ask.
     static func outcome(closingCausesSleep: Bool, sleepDisabled: Bool,
                         isOnACPower: Bool, holdsSystemSleepAssertion: Bool) -> Outcome {
-        guard closingCausesSleep && !sleepDisabled else { return .staysAwake }
+        if sleepDisabled { return .staysAwake }
         guard isOnACPower else { return .sleepsOnBattery }
+        guard closingCausesSleep else { return .staysAwake }
         return holdsSystemSleepAssertion ? .screenOffKeepsRunning : .sleeps
     }
 
