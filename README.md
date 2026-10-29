@@ -170,7 +170,8 @@ ditto build/LidKeeper.app /Applications/LidKeeper.app
 
 ## Using it
 
-Click the menu-bar cup icon (it's filled while the Mac is being kept awake):
+Click the laptop in the menu bar. It's just an outline while sleep is allowed,
+and shows the light from its screen while the Mac is being kept awake:
 
 - **Keep Awake / Let It Sleep** — toggle staying awake indefinitely.
 - **Keep Awake For ▸** — 15 min, 30 min, 1 / 2 / 5 hours, or until you turn it off.
@@ -226,22 +227,31 @@ login item points at a copy that stays put — `make-app.sh` replaces
 ```
 LidKeeper/
 ├── Package.swift
+├── Design/logo-artwork.png             # the original logo the code is traced from
 ├── Scripts/
 │   ├── make-app.sh                     # bundle into LidKeeper.app
 │   ├── install-helper.sh               # install/remove the root helper
 │   └── lidkeeper-helper                # the helper itself (runs as root)
-└── Sources/LidKeeper/
-    ├── main.swift                      # entry point (menu-bar-only app)
-    ├── AppDelegate.swift               # lifecycle + launch flags
-    ├── PowerAssertionManager.swift     # IOKit power assertions
-    ├── PowerSource.swift               # AC vs battery, charge level
-    ├── Lid.swift                       # what closing the lid will do
-    ├── SleepSettings.swift             # client of the root helper
-    ├── ClaudeCodeActivity.swift        # last Claude Code transcript write
-    ├── AutoKeepAwake.swift             # Auto mode rules + 15 s checks
-    ├── StartAtLogin.swift              # login item (SMAppService)
-    └── StatusMenuController.swift      # menu-bar item + menu
+└── Sources/
+    ├── LidKeeper/
+    │   ├── main.swift                  # entry point (menu-bar-only app)
+    │   ├── AppDelegate.swift           # lifecycle + launch flags
+    │   ├── PowerAssertionManager.swift # IOKit power assertions
+    │   ├── PowerSource.swift           # AC vs battery, charge level
+    │   ├── Lid.swift                   # what closing the lid will do
+    │   ├── SleepSettings.swift         # client of the root helper
+    │   ├── ClaudeCodeActivity.swift    # last Claude Code transcript write
+    │   ├── AutoKeepAwake.swift         # Auto mode rules + 15 s checks
+    │   ├── StartAtLogin.swift          # login item (SMAppService)
+    │   └── StatusMenuController.swift  # menu-bar item + menu
+    ├── LidKeeperArt/Logo.swift         # the logo: app icon + menu-bar glyph
+    └── make-icon/main.swift            # renders the icon for make-app.sh
 ```
+
+The logo is drawn in code rather than shipped as images, so the app icon and
+the one-tone menu-bar glyph share one design and stay sharp at every size.
+`make-app.sh` renders the icon at each size macOS wants and packs it into
+`AppIcon.icns` with `iconutil`.
 
 ## License
 

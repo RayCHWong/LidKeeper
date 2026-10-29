@@ -29,6 +29,15 @@ cp "${BIN}" "${OUT}/Contents/MacOS/${APP_NAME}"
 cp Scripts/install-helper.sh Scripts/lidkeeper-helper "${OUT}/Contents/Resources/"
 chmod 755 "${OUT}/Contents/Resources/lidkeeper-helper"
 
+# The logo is drawn in code (Sources/LidKeeperArt); render it at every icon
+# size and pack it the way Finder and the Dock expect.
+echo "▸ Rendering the app icon…"
+ICONSET="build/AppIcon.iconset"
+rm -rf "${ICONSET}"
+"$(swift build -c release --show-bin-path)/make-icon" "${ICONSET}"
+iconutil -c icns "${ICONSET}" -o "${OUT}/Contents/Resources/AppIcon.icns"
+rm -rf "${ICONSET}"
+
 cat > "${OUT}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -38,6 +47,7 @@ cat > "${OUT}/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>     <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>      <string>${BUNDLE_ID}</string>
     <key>CFBundleExecutable</key>      <string>${APP_NAME}</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundleVersion</key>         <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>

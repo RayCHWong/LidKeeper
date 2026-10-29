@@ -1,4 +1,5 @@
 import AppKit
+import LidKeeperArt
 
 /// Owns the menu-bar status item and translates clicks into assertion changes.
 final class StatusMenuController: NSObject, NSMenuDelegate {
@@ -318,19 +319,22 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     // MARK: - Icon
 
+    /// The logo in one tone: the laptop's outline while sleep is allowed,
+    /// with the light from its screen while the Mac is kept awake.
     private func refreshIcon() {
         guard let button = statusItem.button else { return }
-        let symbol = power.isActive ? "cup.and.saucer.fill" : "cup.and.saucer"
-        let label = power.isActive ? "Keep Awake is on" : "Keep Awake is off"
-        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) {
-            image.isTemplate = true
-            button.image = image
-            button.title = ""
-        } else {
-            // Fallback for the unlikely case the SF Symbol is unavailable.
-            button.image = nil
-            button.title = power.isActive ? "AWAKE" : "zzz"
+        let lit = power.isActive
+        // Drawn on demand, so it's sharp at whatever scale the menu bar uses.
+        let image = NSImage(size: NSSize(width: 24, height: 14), flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            Logo.drawGlyph(in: ctx, rect: rect, lit: lit)
+            return true
         }
+        // A template image, so macOS tints it to match the menu bar.
+        image.isTemplate = true
+        image.accessibilityDescription = lit ? "Keep Awake is on" : "Keep Awake is off"
+        button.image = image
+        button.title = ""
     }
 
     // MARK: - Helpers
