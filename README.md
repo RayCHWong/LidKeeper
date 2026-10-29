@@ -1,7 +1,8 @@
 # LidKeeper
 
 A tiny macOS menu-bar app that keeps your Mac awake — including with the
-**lid closed** (clamshell). Keep it awake indefinitely, for a
+**lid closed** when it's plugged in, or on battery too if you install its
+[root helper](#keep-awake-on-battery). Keep it awake indefinitely, for a
 set time, or turn on **Auto** to keep it awake only while Claude Code is
 working, pausing when the battery gets low. No Dock icon, no window; it lives
 quietly in the menu bar.
@@ -17,7 +18,7 @@ Mac awake, LidKeeper holds:
 
 | Assertion type | Effect |
 | --- | --- |
-| `kIOPMAssertionTypePreventSystemSleep` | Stops the system sleeping, including when the lid is closed (it's what `caffeinate -s` does). Apple documents it as working on AC power only — see [Will closing the lid sleep?](#will-closing-the-lid-sleep) |
+| `kIOPMAssertionTypePreventSystemSleep` | Keeps the Mac running when the lid is closed (it's what `caffeinate -s` does) — on AC power only; macOS ignores it on battery. See [Will closing the lid sleep?](#will-closing-the-lid-sleep) |
 | `kIOPMAssertionTypePreventUserIdleSystemSleep` | Stops idle sleep, and is documented to work **on battery** too (`caffeinate -i`). |
 | `kIOPMAssertionTypePreventUserIdleDisplaySleep` | Optional. Also keeps the display awake. Toggled by "Also Keep Screen On". |
 
@@ -33,22 +34,86 @@ pmset -g assertions | grep LidKeeper
 
 ## Will closing the lid sleep?
 
-Apple documents the lid-closed assertion as working on AC power only, and other
-settings or software on a Mac can also stop a closed lid from sleeping. Rather
-than guess, LidKeeper asks macOS: while it's keeping the Mac awake, the menu
-shows either "Closing the lid won't sleep this Mac" or a ⚠︎ warning that it
-will. That's macOS's own `AppleClamshellCausesSleep` flag, which you can check
-yourself:
+It depends on whether the Mac is plugged in. While LidKeeper is keeping the Mac
+awake, a line in the menu says what closing the lid will do right now:
+
+| Menu line | What happens when the lid closes |
+| --- | --- |
+| Closing the lid turns off the screen; this Mac keeps running | You're on AC power. macOS starts lid sleep, but LidKeeper's `PreventSystemSleep` assertion turns it into *dark wake*: the screen turns off (and locks, if you've set that up), but the Mac keeps running. |
+| ⚠︎ On battery, closing the lid will sleep this Mac | macOS ignores that assertion on battery, as Apple documents, so the Mac really sleeps. |
+| Closing the lid won't sleep this Mac | macOS itself won't start lid sleep right now, or sleep is turned off system-wide — either way, not because of LidKeeper. |
+| ⚠︎ Closing the lid will sleep this Mac | LidKeeper couldn't take its assertion (rare), so it can't keep a closed Mac running. |
+
+On battery, assertions alone can't keep a closed Mac running. Getting around
+macOS there means turning sleep off system-wide, which needs administrator
+rights — **Also Keep Awake on Battery** does exactly that, through a small root
+helper you install once. It's off until you turn it on; see
+[Keep Awake on Battery](#keep-awake-on-battery).
+
+The menu combines what macOS reports with the power source. macOS's own
+`AppleClamshellCausesSleep` flag only says whether closing the lid starts lid
+sleep; it doesn't count LidKeeper's assertion, so it can say `Yes` even when a
+plugged-in Mac will keep running. You can check it, and whether sleep is off
+system-wide, yourself:
 
 ```bash
-ioreg -r -k AppleClamshellState -d 1 | grep AppleClamshellCausesSleep
+ioreg -r -k AppleClamshellState -d 1 | grep -E 'AppleClamshellCausesSleep|SleepDisabled'
 ```
 
-`No` means closing the lid won't sleep the Mac right now, for whatever reason —
-not necessarily because of LidKeeper. If it still says `No` after you quit
-LidKeeper, something else is keeping a closed lid awake, and LidKeeper's
-settings (including Auto's battery rule) can't change that. A closed MacBook
-that stays awake keeps using battery and can get warm in a bag.
+To see what actually happened after you close and reopen the lid:
+
+```bash
+pmset -g log | grep "Clamshell Sleep" | tail -n 1
+```
+
+`Entering DarkWake state` means the Mac kept running; `Entering Sleep state`
+means it slept. A closed MacBook that keeps running still uses power and can
+get warm in a bag.
+
+## Keep Awake on Battery
+
+Power assertions can't keep a closed lid awake on battery — macOS ignores
+`PreventSystemSleep` there, as Apple documents (`man caffeinate`). The one
+switch that works is `pmset disablesleep`, which turns sleep off system-wide
+and needs root. **Also Keep Awake on Battery** in the menu uses it, and only
+while LidKeeper is keeping the Mac awake.
+
+The first time you turn it on, LidKeeper explains what it's about to do and
+asks for an administrator password through the standard macOS prompt. Two
+files go in:
+
+| File | Owner / mode | What it is |
+| --- | --- | --- |
+| `/usr/local/libexec/lidkeeper-helper` | `root:wheel` `0755` | A 40-line `/bin/sh` script. It takes one argument — `on`, `off` or `status` — and runs `pmset -a disablesleep 1/0`, then reports back what macOS actually did. |
+| `/etc/sudoers.d/lidkeeper` | `root:wheel` `0440` | Lets **your user only** run that helper, with exactly those three arguments, without a password. |
+
+That's the whole of LidKeeper's root surface: one setting, three fixed
+commands. The app itself keeps running as you, and calls the helper with
+`sudo -n` (never prompting, so it fails cleanly rather than hanging).
+
+A few deliberate choices:
+
+- **It's held, not set.** Sleep goes off when keep-awake turns on and back on
+  when it turns off — including when a timer expires, when Auto decides Claude
+  Code has gone quiet, and when you quit.
+- **A crash can't leave your Mac awake forever.** LidKeeper remembers that it
+  turned sleep off, and the next launch puts it back.
+- **It won't undo someone else's setting.** If sleep was already off when
+  LidKeeper started, it leaves it alone.
+- **The installer refuses an unsafe install** — it won't put a root-run script
+  anywhere that isn't root-owned and root-writable-only, and `visudo` checks
+  the rule before it's moved into place, so a bad file can't lock you out of
+  `sudo`.
+
+Install or remove it from a terminal instead, if you'd rather:
+
+```bash
+sudo bash Scripts/install-helper.sh install
+sudo bash Scripts/install-helper.sh uninstall
+```
+
+**Remove the Root Helper…** in the menu does the same as `uninstall`: it turns
+sleep back on and takes both files away.
 
 ## Auto mode (Claude Code + battery)
 
@@ -112,9 +177,11 @@ Click the menu-bar cup icon (it's filled while the Mac is being kept awake):
 - **Auto: While Claude Code Works** — see Auto mode above.
 - **Auto Settings ▸** — how long to stay awake after Claude Code goes quiet, and what to do on battery.
 - **Also Keep Screen On** — additionally prevent the display from sleeping.
+- **Also Keep Awake on Battery** — keep a closed lid awake on battery too. Needs a one-time administrator password; see [Keep Awake on Battery](#keep-awake-on-battery).
 - **Start at Login** — open LidKeeper automatically when you log in.
+- **Remove the Root Helper…** — shown once the helper is installed; takes it away again.
 - The header line shows the current state and why.
-- While it's keeping the Mac awake, a line near the bottom says whether closing the lid will sleep the Mac.
+- While it's keeping the Mac awake, a line near the bottom says what closing the lid will do — keep running on AC power, or sleep on battery.
 
 ### Command-line flags
 
@@ -137,30 +204,39 @@ login item points at a copy that stays put — `make-app.sh` replaces
 
 ## Limitations
 
-- **Lid closed:** whether a closed Mac stays awake depends on whether it's
-  plugged in, and on the Mac's own settings and software. The menu shows what
-  macOS reports (see [Will closing the lid sleep?](#will-closing-the-lid-sleep)).
+- **Lid closed:** with assertions alone, a closed Mac only keeps running on AC
+  power. On battery it takes **Also Keep Awake on Battery** and its root helper
+  (see [Will closing the lid sleep?](#will-closing-the-lid-sleep)).
+- **Keep Awake on Battery is a blunt switch.** `pmset disablesleep` turns sleep
+  off for the whole system, not just for a closed lid, and not just on battery.
+  LidKeeper only holds it while keep-awake is on, but while it's held, nothing
+  idle-sleeps.
 - Auto watches `~/.claude/projects`. If you've moved Claude Code's config with
   `CLAUDE_CONFIG_DIR`, Auto won't see its activity.
 - Other apps can hold sleep assertions of their own (the Claude desktop app,
   for example), so the Mac may stay awake even when LidKeeper lets go. Check
   with `pmset -g assertions`.
-- LidKeeper only *prevents sleep*; it doesn't change any system power settings,
-  so quitting it (or letting a timer expire) always returns your Mac to its
-  normal behaviour.
+- Unless you turn on **Also Keep Awake on Battery**, LidKeeper only *prevents
+  sleep* and changes no system power settings — quitting it (or letting a timer
+  expire) always returns your Mac to its normal behaviour. With that option on,
+  the one setting it changes is put back the same way.
 
 ## Project layout
 
 ```
 LidKeeper/
 ├── Package.swift
-├── Scripts/make-app.sh                 # bundle into LidKeeper.app
+├── Scripts/
+│   ├── make-app.sh                     # bundle into LidKeeper.app
+│   ├── install-helper.sh               # install/remove the root helper
+│   └── lidkeeper-helper                # the helper itself (runs as root)
 └── Sources/LidKeeper/
     ├── main.swift                      # entry point (menu-bar-only app)
     ├── AppDelegate.swift               # lifecycle + launch flags
     ├── PowerAssertionManager.swift     # IOKit power assertions
     ├── PowerSource.swift               # AC vs battery, charge level
-    ├── Lid.swift                       # what macOS says closing the lid will do
+    ├── Lid.swift                       # what closing the lid will do
+    ├── SleepSettings.swift             # client of the root helper
     ├── ClaudeCodeActivity.swift        # last Claude Code transcript write
     ├── AutoKeepAwake.swift             # Auto mode rules + 15 s checks
     ├── StartAtLogin.swift              # login item (SMAppService)

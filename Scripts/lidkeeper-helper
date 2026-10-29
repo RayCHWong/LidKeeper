@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# LidKeeper's privileged helper. Installed as root:wheel 0755 at
+# /usr/local/libexec/lidkeeper-helper by Scripts/install-helper.sh.
+#
+# Power assertions can't keep a closed lid awake on battery — macOS ignores
+# `PreventSystemSleep` there (`man caffeinate`). The only switch that works
+# is `pmset disablesleep`, which turns sleep off system-wide and needs root.
+# This helper is the whole of what LidKeeper does as root: it takes one verb
+# and touches that one setting.
+#
+# Usage:  lidkeeper-helper on | off | status
+# Prints the resulting state ("on" or "off") and exits non-zero if the
+# setting didn't take.
+set -eu
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
+
+usage() {
+    echo "usage: lidkeeper-helper on|off|status" >&2
+    exit 64
+}
+
+# What macOS itself reports, rather than what we just asked for.
+sleep_disabled() {
+    ioreg -r -d1 -c IOPMrootDomain \
+        | awk -F'= ' '/"SleepDisabled"/ { print ($2 == "Yes") ? "on" : "off"; found = 1 }
+                      END { if (!found) print "unknown" }'
+}
+
+[ $# -eq 1 ] || usage
+
+case "$1" in
+    status)
+        sleep_disabled
+        exit 0
+        ;;
+    on)  pmset -a disablesleep 1 ;;
+    off) pmset -a disablesleep 0 ;;
+    *)   usage ;;
+esac
+
+state="$(sleep_disabled)"
+if [ "$state" != "$1" ]; then
+    echo "lidkeeper-helper: pmset ran but SleepDisabled is $state, not $1" >&2
+    exit 75
+fi
+echo "$state"

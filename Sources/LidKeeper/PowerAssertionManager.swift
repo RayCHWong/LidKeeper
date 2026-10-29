@@ -4,21 +4,29 @@ import IOKit.pwr_mgt
 /// Holds macOS power-management assertions that keep the Mac awake.
 ///
 /// While active it holds two sleep assertions together:
-/// - `PreventSystemSleep` is what keeps a closed lid awake. Apple documents
-///   it as working on AC power only (`man caffeinate`), and other things can
-///   affect lid sleep too, so the menu shows what macOS actually reports
-///   (see `Lid`).
+/// - `PreventSystemSleep` keeps the Mac running when the lid closes, but
+///   only on AC power: macOS ignores it on battery, as Apple documents
+///   (`man caffeinate`). See `Lid`.
 /// - `PreventUserIdleSystemSleep` stops idle sleep, and is documented to
 ///   work on battery as well (with the lid open).
 ///
 /// A third, independent assertion (`PreventUserIdleDisplaySleep`) keeps
 /// the display awake when the lid is open. It is toggled separately.
+///
+/// Assertions are all this type does on its own. When "Keep Awake on
+/// Battery" is turned on, `SleepSettings` also turns system sleep off
+/// through LidKeeper's root helper for as long as we're active — the only
+/// way to keep a closed lid awake on battery.
 final class PowerAssertionManager {
 
     // MARK: - Observable state
 
     /// True while the Mac is being kept awake.
     private(set) var isActive = false
+
+    /// True while `PreventSystemSleep` is held — the assertion that keeps a
+    /// closed lid running on AC power.
+    var holdsSystemSleepAssertion: Bool { systemAssertionID != IOPMAssertionID(0) }
 
     /// When `true`, also prevents the display from sleeping (lid open).
     var keepDisplayAwake = false {
@@ -48,11 +56,16 @@ final class PowerAssertionManager {
     private var displayAssertionID = IOPMAssertionID(0)
     private var autoReleaseTimer: Timer?
     private var autoReleaseDate: Date?
+    private let sleepSettings: SleepSettings
 
     /// Human-readable reason shown in `pmset -g assertions`.
     private let reason = "LidKeeper is keeping this Mac awake" as CFString
 
     // MARK: - Lifecycle
+
+    init(sleepSettings: SleepSettings) {
+        self.sleepSettings = sleepSettings
+    }
 
     /// Start keeping the Mac awake. Pass `duration` (seconds) to auto-release,
     /// or `nil` to stay awake until explicitly turned off.
@@ -65,6 +78,8 @@ final class PowerAssertionManager {
         if keepDisplayAwake { create(kIOPMAssertionTypePreventUserIdleDisplaySleep, &displayAssertionID) }
 
         isActive = systemAssertionID != IOPMAssertionID(0) || idleAssertionID != IOPMAssertionID(0)
+
+        if isActive { sleepSettings.beginOverride() }
 
         if isActive, let duration {
             autoReleaseDate = Date().addingTimeInterval(duration)
@@ -84,6 +99,7 @@ final class PowerAssertionManager {
     func deactivate() {
         cancelTimer()
         releaseAllAssertions()
+        sleepSettings.endOverride()
         if isActive {
             isActive = false
             onStateChange?()

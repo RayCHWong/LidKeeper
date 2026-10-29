@@ -2,14 +2,19 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let power = PowerAssertionManager()
+    private let sleepSettings = SleepSettings()
+    private lazy var power = PowerAssertionManager(sleepSettings: sleepSettings)
     private var auto: AutoKeepAwake?
     private var menuController: StatusMenuController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // If we exited last time while sleep was turned off, turn it back on
+        // before anything else, so a crash can't leave the Mac awake forever.
+        sleepSettings.recoverAtLaunch()
+
         let auto = AutoKeepAwake(power: power)
         self.auto = auto
-        menuController = StatusMenuController(power: power, auto: auto)
+        menuController = StatusMenuController(power: power, auto: auto, sleepSettings: sleepSettings)
 
         // Launch flags do what the matching menu items do, for scripts.
         // `--keep-awake` starts a manual keep-awake (turning Auto off) and

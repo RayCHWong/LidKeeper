@@ -24,6 +24,11 @@ rm -rf "${OUT}"
 mkdir -p "${OUT}/Contents/MacOS" "${OUT}/Contents/Resources"
 cp "${BIN}" "${OUT}/Contents/MacOS/${APP_NAME}"
 
+# "Also Keep Awake on Battery" installs these two from the bundle, through
+# the usual administrator prompt. See Scripts/install-helper.sh.
+cp Scripts/install-helper.sh Scripts/lidkeeper-helper "${OUT}/Contents/Resources/"
+chmod 755 "${OUT}/Contents/Resources/lidkeeper-helper"
+
 cat > "${OUT}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
