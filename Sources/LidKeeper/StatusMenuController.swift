@@ -9,6 +9,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let auto: AutoKeepAwake
     private let sleepSettings: SleepSettings
 
+    /// The menu while it's on screen, so a change of power source can
+    /// refresh it in place; `nil` while it's closed.
+    private var openMenu: NSMenu?
+    private var powerObserver: AnyObject?
+
     /// Preset auto-release durations. `nil` means "until I turn it off".
     private let durations: [(title: String, seconds: TimeInterval?)] = [
         ("15 Minutes", 15 * 60),
@@ -34,10 +39,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
+        // Plugging in or out changes what the menu says about the lid and
+        // Auto; if it's open, rebuild it there and then.
+        powerObserver = PowerSource.observe { [weak self] in
+            guard let self, let menu = self.openMenu else { return }
+            self.menuNeedsUpdate(menu)
+        }
+
         refreshIcon()
     }
 
-    // MARK: - Menu (rebuilt each time it opens so state is always fresh)
+    // MARK: - Menu (rebuilt each time it opens, and while open when the power changes)
+
+    func menuWillOpen(_ menu: NSMenu) { openMenu = menu }
+    func menuDidClose(_ menu: NSMenu) { openMenu = nil }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         auto.evaluate()

@@ -44,7 +44,7 @@ struct PowerSource {
             let handler: () -> Void
             var source: CFRunLoopSource?
             init(_ handler: @escaping () -> Void) { self.handler = handler }
-            deinit { if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .defaultMode) } }
+            deinit { if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) } }
         }
         let observer = Observer(handler)
         let context = Unmanaged.passUnretained(observer).toOpaque()
@@ -53,7 +53,7 @@ struct PowerSource {
             Unmanaged<Observer>.fromOpaque(context).takeUnretainedValue().handler()
         }, context)?.takeRetainedValue() else { return nil }
         observer.source = source
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         return observer
     }
 }
